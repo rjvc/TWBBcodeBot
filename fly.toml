@@ -21,6 +21,7 @@ app = "python main.py"
 
 [services]
   internal_port = 8080
+  processes = ["app"] # Associate the service with the app process
   [[services.ports]]
     port = "8080"
   [[services.tcp_checks]]
