@@ -82,7 +82,7 @@ class SelectServerWorld(View):
     async def on_server_select(self, interaction: discord.Interaction):
         """Handle server selection."""
         self.selected_server = interaction.data['values'][0]
-        worlds = await fetch_worlds(self.selected_server)  # Ensure this is awaited
+        worlds = fetch_worlds(self.selected_server)  # No need to await this, it's a synchronous function
         if worlds:
             options = [discord.SelectOption(label=world['key'], value=world['key'])
                        for world in worlds]
@@ -100,8 +100,6 @@ class SelectServerWorld(View):
         channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
         save_configs()  # Save config to file
         await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
-
-
 
 # Register the slash command to choose server/world
 @bot.tree.command(name="choose", description="Choose a server and world for this channel")
