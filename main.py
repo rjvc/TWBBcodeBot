@@ -76,14 +76,13 @@ class SelectServerWorld(View):
         options = [discord.SelectOption(label=server['name'], value=server['code'])
                    for server in self.server_data]
         select = Select(placeholder="Choose a server", options=options, min_values=1, max_values=1)
-        select.callback = self.on_server_select
+        select.callback = self.on_server_select  # Ensure the callback is set properly here
         return select
 
-async def on_server_select(self, interaction: discord.Interaction):
-    try:
+    async def on_server_select(self, interaction: discord.Interaction):
+        """Handle server selection."""
         self.selected_server = interaction.data['values'][0]
         worlds = await fetch_worlds(self.selected_server)  # Ensure this is awaited
-        print(f"Worlds for server {self.selected_server}: {worlds}")  # Debugging line
         if worlds:
             options = [discord.SelectOption(label=world['key'], value=world['key'])
                        for world in worlds]
@@ -93,20 +92,15 @@ async def on_server_select(self, interaction: discord.Interaction):
             await interaction.response.send_message("Please select a world.", view=view)
         else:
             await interaction.response.send_message("No worlds found for this server.")
-    except Exception as e:
-        print(f"Error in on_server_select: {e}")  # Catch and print any errors
-        await interaction.response.send_message("An error occurred while processing your request.")
-        
-async def on_world_select(self, interaction: discord.Interaction):
-    try:
+
+    async def on_world_select(self, interaction: discord.Interaction):
+        """Handle world selection."""
         selected_world = interaction.data['values'][0]
         channel_id = str(interaction.channel.id)
         channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
-        save_configs()  # Save config to file (ensure save_configs is correctly handling async if needed)
+        save_configs()  # Save config to file
         await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
-    except Exception as e:
-        print(f"Error in on_world_select: {e}")  # Catch and print any errors
-        await interaction.response.send_message("An error occurred while selecting the world.")
+
 
 
 # Register the slash command to choose server/world
