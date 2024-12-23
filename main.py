@@ -26,13 +26,17 @@ channel_configs = {}
 
 # Helper function to save channel config to a file (optional, can be replaced by DB)
 def save_configs():
-    with open("channel_configs.json", "w") as f:
-        json.dump(channel_configs, f)
+    try:
+        with open("channel_configs.json", "w") as f:
+            json.dump(channel_configs, f)
+            print("Configuration saved successfully.")  # Debugging line
+    except IOError as e:
+        print(f"Error saving configuration: {e}")
 
 def load_configs():
     global channel_configs
     if os.path.exists("channel_configs.json"):
-        # Check if the file is empty
+        print("Loading configuration from channel_configs.json")  # Debugging line
         if os.path.getsize("channel_configs.json") > 0:
             try:
                 with open("channel_configs.json", "r") as f:
@@ -41,13 +45,11 @@ def load_configs():
                 channel_configs = {}
                 print("Warning: Config file is invalid. Using defaults.")
         else:
-            # File is empty
             channel_configs = {}
+            print("Warning: Config file is empty. Using defaults.")
     else:
-        # File doesn't exist
         channel_configs = {}
         print("Warning: Config file not found. Using defaults.")
-
 
 # Load the saved configs on startup
 load_configs()
@@ -89,12 +91,12 @@ class SelectServerWorld(View):
         else:
             await interaction.response.send_message("No worlds found for this server.")
 
-    async def on_world_select(self, interaction: discord.Interaction):
-        selected_world = interaction.data['values'][0]
-        channel_id = str(interaction.channel.id)
-        channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
-        save_configs()  # Save config to file
-        await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
+async def on_world_select(self, interaction: discord.Interaction):
+    selected_world = interaction.data['values'][0]
+    channel_id = str(interaction.channel.id)
+    channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
+    save_configs()  # Ensure config is saved after every change
+    await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
 
 # Register the slash command to choose server/world
 @bot.tree.command(name="choose", description="Choose a server and world for this channel")
