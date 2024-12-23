@@ -14,20 +14,20 @@ app = "python main.py"
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = 'stop'
+  auto_stop_machines = true
   auto_start_machines = true
   min_machines_running = 0
-  processes = ['app']
+  processes = ["app"]
 
 [services]
   internal_port = 8080
   [[services.ports]]
     port = "8080"
-[[services.tcp_checks]]
-  grace_period = "30s"
-  interval = "15s"
-  restart_limit = 0
-  timeout = "2s"
+  [[services.tcp_checks]]
+    grace_period = "30s"
+    interval = "15s"
+    restart_limit = 0
+    timeout = "2s"
 
 [[vm]]
-  size = 'shared-cpu-1x'
+  size = "shared-cpu-1x"
