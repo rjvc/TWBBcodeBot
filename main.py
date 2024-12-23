@@ -73,33 +73,49 @@ class SelectServerWorld(View):
         self.add_item(self.create_server_select_menu())
 
     def create_server_select_menu(self):
+        # Creating the select menu for server selection
         options = [discord.SelectOption(label=server['name'], value=server['code'])
                    for server in self.server_data]
         select = Select(placeholder="Choose a server", options=options, min_values=1, max_values=1)
-        select.callback = self.on_server_select  # Ensure the callback is set properly here
+        select.callback = self.on_server_select  # Set the callback for when a server is selected
         return select
 
     async def on_server_select(self, interaction: discord.Interaction):
         """Handle server selection."""
+        # Store the selected server from the interaction
         self.selected_server = interaction.data['values'][0]
-        worlds = fetch_worlds(self.selected_server)  # No need to await this, it's a synchronous function
-        if worlds:
-            options = [discord.SelectOption(label=world['key'], value=world['key'])
-                       for world in worlds]
-            select_world_menu = Select(placeholder="Choose a world", options=options, min_values=1, max_values=1)
-            select_world_menu.callback = self.on_world_select
-            view = View().add_item(select_world_menu)  # Create a new View instance
-            await interaction.response.send_message("Please select a world.", view=view)
-        else:
+        # Fetch worlds based on the selected server
+        worlds = fetch_worlds(self.selected_server)
+        if not worlds:
             await interaction.response.send_message("No worlds found for this server.")
+            return
+
+        # Prepare the dropdown menu with the fetched worlds
+        options = [discord.SelectOption(label=world['key'], value=world['key'])
+                   for world in worlds]
+
+        # Create the select menu for world selection
+        select_world_menu = Select(placeholder="Choose a world", options=options, min_values=1, max_values=1)
+        select_world_menu.callback = self.on_world_select  # Set the callback for when a world is selected
+
+        # Create a new View and add the world select menu
+        view = View().add_item(select_world_menu)
+        await interaction.response.send_message("Please select a world.", view=view)
 
     async def on_world_select(self, interaction: discord.Interaction):
         """Handle world selection."""
+        # Store the selected world from the interaction
         selected_world = interaction.data['values'][0]
         channel_id = str(interaction.channel.id)
-        channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
-        save_configs()  # Save config to file
-        await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
+
+        # Save the selected world and server to the channel configuration
+        channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}
+        save_configs()  # Save the updated config to the file
+
+        # Send confirmation message
+        await interaction.response.send_message(
+            f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel."
+        )
 
 # Register the slash command to choose server/world
 @bot.tree.command(name="choose", description="Choose a server and world for this channel")
@@ -128,41 +144,11 @@ async def choose(interaction: discord.Interaction):
         else:
             await interaction.response.send_message("Could not fetch servers at the moment.")
 
-# Register the slash command to show available servers
-@bot.tree.command(name="servers", description="Show the available servers")
-async def servers(interaction: discord.Interaction):
-    """Fetches and displays available servers."""
-    servers = fetch_servers()
-    if servers:
-        embed = discord.Embed(title="Available Servers", description="Here are the available servers:", color=discord.Color.blue())
-        for server in servers:
-            country_code = server.get("code")  # Country code (e.g., 'br' for Brazil)
-            country_flag = f":flag_{country_code.lower()}:"  # Display flag emoji
-            embed.add_field(name=f"{country_flag} {server['name']}", value=f"Server Code: {server['code']}", inline=False)
-        await interaction.response.send_message(embed=embed)
-    else:
-        await interaction.response.send_message("Couldn't fetch server information at the moment.")
-
-# Register the slash command to show the world list based on server code
-@bot.tree.command(name="worlds", description="Show the available worlds for a specific server")
-async def worlds(interaction: discord.Interaction, server_code: str):
-    """Fetches and displays open worlds for a specific server."""
-    worlds = fetch_worlds(server_code)
-    if worlds:
-        embed = discord.Embed(title=f"Available Worlds for {server_code.upper()}", description="Here are the open worlds:", color=discord.Color.green())
-        for world in worlds:
-            key = world.get("key")
-            embed.add_field(name=key, value=f"World Key: {key}", inline=False)
-        await interaction.response.send_message(embed=embed)
-    else:
-        await interaction.response.send_message(f"Couldn't fetch world information for server {server_code.upper()}.")
-
 # Event listener to sync slash commands
 @bot.event
 async def on_ready():
     # Sync commands with Discord
     await bot.tree.sync()
-    print(f"Bot is ready and slash commands are synced.")
 
 # Event listener for messages
 @bot.event
