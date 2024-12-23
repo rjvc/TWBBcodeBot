@@ -79,24 +79,35 @@ class SelectServerWorld(View):
         select.callback = self.on_server_select
         return select
 
-    async def on_server_select(self, interaction: discord.Interaction):
+async def on_server_select(self, interaction: discord.Interaction):
+    try:
         self.selected_server = interaction.data['values'][0]
-        worlds = fetch_worlds(self.selected_server)  # Get worlds for the selected server
+        worlds = await fetch_worlds(self.selected_server)  # Ensure this is awaited
+        print(f"Worlds for server {self.selected_server}: {worlds}")  # Debugging line
         if worlds:
             options = [discord.SelectOption(label=world['key'], value=world['key'])
                        for world in worlds]
             select_world_menu = Select(placeholder="Choose a world", options=options, min_values=1, max_values=1)
             select_world_menu.callback = self.on_world_select
-            await interaction.response.send_message("Please select a world.", view=View().add_item(select_world_menu))
+            view = View().add_item(select_world_menu)  # Create a new View instance
+            await interaction.response.send_message("Please select a world.", view=view)
         else:
             await interaction.response.send_message("No worlds found for this server.")
-
+    except Exception as e:
+        print(f"Error in on_server_select: {e}")  # Catch and print any errors
+        await interaction.response.send_message("An error occurred while processing your request.")
+        
 async def on_world_select(self, interaction: discord.Interaction):
-    selected_world = interaction.data['values'][0]
-    channel_id = str(interaction.channel.id)
-    channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
-    save_configs()  # Ensure config is saved after every change
-    await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
+    try:
+        selected_world = interaction.data['values'][0]
+        channel_id = str(interaction.channel.id)
+        channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}  # Save selected world and server
+        save_configs()  # Save config to file (ensure save_configs is correctly handling async if needed)
+        await interaction.response.send_message(f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel.")
+    except Exception as e:
+        print(f"Error in on_world_select: {e}")  # Catch and print any errors
+        await interaction.response.send_message("An error occurred while selecting the world.")
+
 
 # Register the slash command to choose server/world
 @bot.tree.command(name="choose", description="Choose a server and world for this channel")
