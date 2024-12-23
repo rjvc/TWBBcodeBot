@@ -34,14 +34,20 @@ def load_configs():
     if os.path.exists("channel_configs.json"):
         # Check if the file is empty
         if os.path.getsize("channel_configs.json") > 0:
-            with open("channel_configs.json", "r") as f:
-                channel_configs = json.load(f)
+            try:
+                with open("channel_configs.json", "r") as f:
+                    channel_configs = json.load(f)
+            except json.JSONDecodeError:
+                channel_configs = {}
+                print("Warning: Config file is invalid. Using defaults.")
         else:
-            # Initialize as an empty dictionary if the file is empty
+            # File is empty
             channel_configs = {}
     else:
-        # Initialize as an empty dictionary if the file doesn't exist
+        # File doesn't exist
         channel_configs = {}
+        print("Warning: Config file not found. Using defaults.")
+
 
 # Load the saved configs on startup
 load_configs()
