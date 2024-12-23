@@ -1,9 +1,9 @@
-# fly.toml app configuration file generated for twbbcodebot-empty-wave-6960 on 2024-12-23T15:25:12Z
+# fly.toml app configuration file generated for twbbcodebot on 2024-12-23T15:30:36Z
 #
 # See https://fly.io/docs/reference/configuration/ for information about how to use this file.
 #
 
-app = 'twbbcodebot-empty-wave-6960'
+app = 'twbbcodebot'
 primary_region = 'mad'
 
 [build]
@@ -17,4 +17,6 @@ primary_region = 'mad'
   processes = ['app']
 
 [[vm]]
-  size = 'shared-cpu-1x'
+  memory = '1gb'
+  cpu_kind = 'shared'
+  cpus = 1
