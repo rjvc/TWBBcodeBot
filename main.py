@@ -29,12 +29,19 @@ def save_configs():
     with open("channel_configs.json", "w") as f:
         json.dump(channel_configs, f)
 
-# Helper function to load channel config from a file (optional, can be replaced by DB)
 def load_configs():
     global channel_configs
     if os.path.exists("channel_configs.json"):
-        with open("channel_configs.json", "r") as f:
-            channel_configs = json.load(f)
+        # Check if the file is empty
+        if os.path.getsize("channel_configs.json") > 0:
+            with open("channel_configs.json", "r") as f:
+                channel_configs = json.load(f)
+        else:
+            # Initialize as an empty dictionary if the file is empty
+            channel_configs = {}
+    else:
+        # Initialize as an empty dictionary if the file doesn't exist
+        channel_configs = {}
 
 # Load the saved configs on startup
 load_configs()
