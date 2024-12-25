@@ -1,39 +1,64 @@
 import re
 import aiohttp
+import urllib.parse
+from commands.servers import fetch_servers
+from commands.utils import get_final_url
 
-async def fetch_tribe_from_api(tribe_tag, world):
+async def fetch_ally_from_game(ally_tag, world, server_code):
     """
-    Fetch tribe information from the API using the full tribe name by matching the tag and the given world.
+    Fetch ally (tribe) information from the game public files using the ally name, world, and server_code.
     """
-    base_url = f"https://twhelp.app/api/v2/versions/pt/servers/{world}"
-    async with aiohttp.ClientSession() as session:
-        async with session.get(f"{base_url}/tribes?limit=100") as response:
-            if response.status == 200:
-                data = await response.json()
-                for tribe in data["data"]:
-                    # If the tribe tag matches, return the corresponding tribe info
-                    if tribe["tag"].lower() == tribe_tag.lower():  # Case insensitive match
-                        return tribe
+    server_info = fetch_servers()
+    server_host = next((server['host'] for server in server_info if server['code'] == server_code), None)
+    
+    if server_host:
+        host = server_host.replace('www', str(world))
+        url = f"https://{host}/map/ally.txt"
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(url) as response:
+                if response.status == 200:
+                    data = await response.text()
+                    # Process the data and find the ally matching the name
+                    for line in data.splitlines():
+                        ally = line.split(",")  # Using comma for CSV splitting
+                        # Check if the line has the correct number of columns (8 columns)
+                        if len(ally) != 8:
+                            continue  # Skip lines with incorrect column count
+                        # Decode URL-encoded characters in the ally tag
+                        ally_tag_decoded = urllib.parse.unquote(ally[2]).replace("+", " ")
+                        # Compare the ally tag case-insensitively
+                        if ally_tag_decoded.strip().lower() == ally_tag.strip().lower():  # Assuming format [name]
+                            return {
+                                "id": ally[0],  # Add ally ID
+                                "name": ally[1],
+                                "tag": ally[2],
+                                "points": ally[6],
+                                "rank": ally[7]
+                            }
     return None
 
-async def process_tribe_bbcode(content, world):
+async def process_tribe_bbcode(content, world, server_code):
     """
-    Find BB code for tribes and replace with a plain link to the tribe profile.
+    Process BBCode of tribe references and format them for Discord.
     """
-    tribe_pattern = r"\[ally\](.*?)\[/ally\]"  # Match tribe tags between [ally] and [/ally]
-    matches = re.findall(tribe_pattern, content)
+    # Match the ally tag pattern
+    ally_pattern = r"\[ally\](.*?)\[/ally\]"
+    matches = re.findall(ally_pattern, content)
 
     for match in matches:
-        print(f"Processing tribe: {match}")
-
-        # Fetch the tribe information from the API by its tag
-        tribe = await fetch_tribe_from_api(match, world)
-        if tribe:
-            name = tribe['name']
-            profile_url = tribe["profileUrl"]
-            link = f"[{name}]({profile_url})"
-            content = content.replace(f"[ally]{match}[/ally]", link)
+        ally_data = await fetch_ally_from_game(match, world, server_code)
+        if ally_data:
+            ally_id = ally_data['id']
+            ally_name = ally_data['name'].replace("+", " ")
+            ally_url = get_final_url("ally", ally_id, world, server_code)
+            formatted_ally = f"[[{ally_name}]]({ally_url})"
+            # Replace using the original `match`
+            content = content.replace(f"[ally]{match}[/ally]", formatted_ally)
         else:
-            content = content.replace(f"[ally]{match}[/ally]", f"Tribe '{match}' not found.")
+            # Use the original match in the not-found message
+            content = content.replace(f"[ally]{match}[/ally]", f"**Ally: {match} not found**")
 
     return content
+
+

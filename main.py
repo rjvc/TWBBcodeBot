@@ -1,14 +1,16 @@
+# main.py
 import os
 import discord
+import json
 from discord.ext import commands
 from discord.ui import Select, View
 from discord import app_commands
-import requests
-import json
+from discord import *
 from dotenv import load_dotenv
 from commands.village import process_village_bbcode
 from commands.player import process_player_bbcode
 from commands.tribe import process_tribe_bbcode
+from commands.servers import fetch_servers, fetch_worlds  # Correct path to 'servers.py' inside 'commands' directory
 
 # Load environment variables
 load_dotenv()
@@ -53,16 +55,6 @@ def load_configs():
 
 # Load the saved configs on startup
 load_configs()
-
-# Helper functions to fetch servers and worlds from the API
-def fetch_servers():
-    response = requests.get("https://twhelp.app/api/v2/versions?limit=500")
-    return response.json()['data'] if response.status_code == 200 else []
-
-def fetch_worlds(server_code):
-    url = f"https://twhelp.app/api/v2/versions/{server_code}/servers?limit=500&open=true"
-    response = requests.get(url)
-    return response.json()['data'] if response.status_code == 200 else []
 
 # Select Menu for Server and World selection
 class SelectServerWorld(View):
@@ -110,75 +102,42 @@ class SelectServerWorld(View):
 
         # Save the selected world and server to the channel configuration
         channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}
-        save_configs()  # Save the updated config to the file
+        save_configs()  # Save the updated configurations
 
-        # Send confirmation message
-        await interaction.response.send_message(
-            f"You have selected world `{selected_world}` for server `{self.selected_server}` in this channel."
-        )
+        await interaction.response.send_message(f"Server: {self.selected_server}, World: {selected_world} set for this channel.")
 
-# Register the slash command to choose server/world
-@bot.tree.command(name="choose", description="Choose a server and world for this channel")
-async def choose(interaction: discord.Interaction):
-    channel_id = str(interaction.channel.id)
 
-    # Check if a world is already set for this channel
-    if channel_id in channel_configs and "world" in channel_configs[channel_id]:
-        # Inform the user of the current world and server
-        current_world = channel_configs[channel_id]['world']
-        current_server = channel_configs[channel_id]['server']
-        await interaction.response.send_message(
-            f"This channel already has a world set (`{current_world}` for server `{current_server}`).\n"
-            "If you want to change it, you can choose a new world from the list below."
-        )
-
-        # Wait for a moment and then show the server/world dropdown menu
-        await interaction.followup.send("Please select a server:", view=SelectServerWorld(fetch_servers()))
-
-    else:
-        # If no world is set, trigger the world selection process
-        servers = fetch_servers()
-        if servers:
-            select_view = SelectServerWorld(servers)
-            await interaction.response.send_message("Please select a server:", view=select_view)
-        else:
-            await interaction.response.send_message("Could not fetch servers at the moment.")
-
-# Event listener to sync slash commands
-@bot.event
-async def on_ready():
-    # Sync commands with Discord
-    await bot.tree.sync()
-
-# Event listener for messages
+# Event for when a message is received
 @bot.event
 async def on_message(message):
-    # Ignore messages from bots
-    if message.author.bot:
+    if message.author == bot.user:
         return
-
-    # Process the command
-    await bot.process_commands(message)
 
     channel_id = str(message.channel.id)
-    world = channel_configs.get(channel_id, {}).get("world")
 
-    if not world:
-        # If no world is set, trigger the world selection process
-        await message.channel.send("This channel does not have a world configured yet. Use `/choose` to set one.")
+    if channel_id not in channel_configs:
+        await message.channel.send("Please set a world and server using the command !twbb set [server] [world].")
         return
 
-    content = message.content
-    updated_content = content
+    world_config = channel_configs.get(channel_id)
+    world = world_config['world']
+    server_code = world_config['server']
 
-    # Process BB codes with the dynamic world
-    updated_content = await process_village_bbcode(updated_content, world)
-    updated_content = await process_player_bbcode(updated_content, world)
-    updated_content = await process_tribe_bbcode(updated_content, world)
+    # Process BBcode for villages, players, and tribes
+    updated_content = message.content
+    updated_content = await process_village_bbcode(updated_content, world, server_code)
+    updated_content = await process_player_bbcode(updated_content, world, server_code)
+    updated_content = await process_tribe_bbcode(updated_content, world, server_code)
 
-    # If the content was updated, send the updated response
-    if updated_content != content:
-        await message.reply(updated_content)
+    await message.reply(updated_content)
 
-# Start the bot
+# Command to set world and server configuration for the channel
+@bot.command()
+async def set(ctx, server: str, world: str):
+    """Set the world and server for the current channel."""
+    channel_configs[str(ctx.channel.id)] = {"world": world, "server": server}
+    save_configs()
+    await ctx.send(f"World: {world} and server: {server} set for this channel.")
+
+# Run the bot
 bot.run(TOKEN)
