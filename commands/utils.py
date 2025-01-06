@@ -1,7 +1,7 @@
+#commands/utils.py
 from commands.servers import fetch_servers
 
 def get_final_url(type, entity_id, world, server_code):
-
     server_info = fetch_servers()
     server_host = next((server['host'] for server in server_info if server['code'] == server_code), None)
     

@@ -1,5 +1,4 @@
-# servers.py
-
+# commands/servers.py
 import requests
 
 def fetch_servers():

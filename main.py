@@ -1,62 +1,66 @@
-# main.py
+#main.py
 import os
-import discord
 import json
+import re
+import discord
 from discord.ext import commands
 from discord.ui import Select, View
 from discord import app_commands
-from discord import *
 from dotenv import load_dotenv
 from commands.village import process_village_bbcode
 from commands.player import process_player_bbcode
-from commands.tribe import process_tribe_bbcode
-from commands.servers import fetch_servers, fetch_worlds  # Correct path to 'servers.py' inside 'commands' directory
+from commands.ally import process_tribe_bbcode
+from commands.icons import process_unit_bbcode, process_building_bbcode
+from commands.servers import fetch_servers, fetch_worlds
+from utils.api import fetch_emojis
+from commands.emojis import EmojiManager
 
 # Load environment variables
 load_dotenv()
 TOKEN = os.getenv("DISCORD_TOKEN")
-if not TOKEN:
-    raise ValueError("Token not found! Make sure 'DISCORD_TOKEN' is set in your .env file.")
+APP_ID = os.getenv("APP_ID")
+if not TOKEN or not APP_ID:
+    raise ValueError("Token or Application ID not found! Make sure 'DISCORD_TOKEN' and 'APP_ID' are set in your .env file.")
 
 # Discord Bot Setup
 intents = discord.Intents.default()
 intents.message_content = True
-bot = commands.Bot(command_prefix="!twbb ", intents=intents)
+bot = discord.Client(intents=intents)
+tree = app_commands.CommandTree(bot)
 
+emoji_manager = EmojiManager(APP_ID, TOKEN)
+emoji_manager.load_emojis()
+
+# Fetch app-specific emojis
+app_emojis = fetch_emojis(APP_ID, TOKEN)
+#print(f"Loaded {app_emojis} emojis.")
 # Dictionary to store world configurations per channel
 channel_configs = {}
 
-# Helper function to save channel config to a file (optional, can be replaced by DB)
+# Helper functions to manage configurations
 def save_configs():
     try:
         with open("channel_configs.json", "w") as f:
             json.dump(channel_configs, f)
-            print("Configuration saved successfully.")  # Debugging line
     except IOError as e:
         print(f"Error saving configuration: {e}")
 
 def load_configs():
     global channel_configs
     if os.path.exists("channel_configs.json"):
-        print("Loading configuration from channel_configs.json")  # Debugging line
         if os.path.getsize("channel_configs.json") > 0:
             try:
                 with open("channel_configs.json", "r") as f:
                     channel_configs = json.load(f)
             except json.JSONDecodeError:
                 channel_configs = {}
-                print("Warning: Config file is invalid. Using defaults.")
         else:
             channel_configs = {}
-            print("Warning: Config file is empty. Using defaults.")
     else:
         channel_configs = {}
-        print("Warning: Config file not found. Using defaults.")
 
 # Load the saved configs on startup
 load_configs()
-
-# Select Menu for Server and World selection
 class SelectServerWorld(View):
     def __init__(self, server_data):
         super().__init__()
@@ -65,79 +69,117 @@ class SelectServerWorld(View):
         self.add_item(self.create_server_select_menu())
 
     def create_server_select_menu(self):
-        # Creating the select menu for server selection
         options = [discord.SelectOption(label=server['name'], value=server['code'])
                    for server in self.server_data]
         select = Select(placeholder="Choose a server", options=options, min_values=1, max_values=1)
-        select.callback = self.on_server_select  # Set the callback for when a server is selected
+        select.callback = self.on_server_select
         return select
 
     async def on_server_select(self, interaction: discord.Interaction):
-        """Handle server selection."""
-        # Store the selected server from the interaction
         self.selected_server = interaction.data['values'][0]
-        # Fetch worlds based on the selected server
         worlds = fetch_worlds(self.selected_server)
         if not worlds:
-            await interaction.response.send_message("No worlds found for this server.")
+            await interaction.response.send_message("No worlds found for this server.", ephemeral=True)
             return
 
-        # Prepare the dropdown menu with the fetched worlds
         options = [discord.SelectOption(label=world['key'], value=world['key'])
                    for world in worlds]
-
-        # Create the select menu for world selection
         select_world_menu = Select(placeholder="Choose a world", options=options, min_values=1, max_values=1)
-        select_world_menu.callback = self.on_world_select  # Set the callback for when a world is selected
-
-        # Create a new View and add the world select menu
+        select_world_menu.callback = self.on_world_select
         view = View().add_item(select_world_menu)
-        await interaction.response.send_message("Please select a world.", view=view)
+        await interaction.response.send_message("Please select a world.", view=view, ephemeral=True)
 
     async def on_world_select(self, interaction: discord.Interaction):
-        """Handle world selection."""
-        # Store the selected world from the interaction
         selected_world = interaction.data['values'][0]
         channel_id = str(interaction.channel.id)
-
-        # Save the selected world and server to the channel configuration
         channel_configs[channel_id] = {"world": selected_world, "server": self.selected_server}
-        save_configs()  # Save the updated configurations
+        save_configs()
+        await interaction.response.send_message(f"Server: {self.selected_server}, World: {selected_world} set for this channel.", ephemeral=True)
 
-        await interaction.response.send_message(f"Server: {self.selected_server}, World: {selected_world} set for this channel.")
+# Slash command to choose server and world
+@tree.command(name="choose", description="Select the server and world for this channel.")
+async def choose(interaction: discord.Interaction):
+    server_data = fetch_servers()
+    if not server_data:
+        await interaction.response.send_message("No servers available. Please try again later.", ephemeral=True)
+        return
+
+    view = SelectServerWorld(server_data)
+    await interaction.response.send_message("Choose a server and world using the dropdown menus below.", view=view, ephemeral=True)
+
+# Slash command to check the current configuration
+@tree.command(name="check", description="Check the current server and world configuration for this channel.")
+async def check(interaction: discord.Interaction):
+    """Check the server and world configuration for the current channel."""
+    channel_id = str(interaction.channel.id)
+    if channel_id in channel_configs:
+        config = channel_configs[channel_id]
+        server = config.get("server", "Not set")
+        world = config.get("world", "Not set")
+        
+        # Get host link for the configured server and world
+        servers = fetch_servers()
+        server_data = next((s for s in servers if s['code'] == server), None)
+        if server_data:
+            host = server_data.get('host', 'unknown')
+            link = f"https://{world}.{host.replace('www.','')}"
+        else:
+            link = "Unknown (server not found)"
+
+        # Respond with the configuration details
+        await interaction.response.send_message(
+            f"**Current configuration**\n"
+            f"Server: ```{server}```\n"
+            f"World: ```{world}```\n"
+            f"Link: ```{link}```",
+            ephemeral=True
+        )
+    else:
+        await interaction.response.send_message(
+            "No server and world configuration is set for this channel. Use /choose to configure it.",
+            ephemeral=True
+        )
+
+@bot.event
+async def on_ready():
+    print(f"Bot is ready. Logged in as {bot.user}")
 
 
-# Event for when a message is received
+
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
     channel_id = str(message.channel.id)
-
     if channel_id not in channel_configs:
-        await message.channel.send("Please set a world and server using the command !twbb set [server] [world].")
+        await message.channel.send("Please set a world and server using the `/choose` command.")
         return
 
     world_config = channel_configs.get(channel_id)
     world = world_config['world']
     server_code = world_config['server']
 
-    # Process BBcode for villages, players, and tribes
+    # Check if the message contains BBCode
+    bbcode_patterns = [
+        r"\[ally\](.*?)\[/ally\]",
+        r"\[player\](.*?)\[/player\]",
+        r"\[coord\](.*?)\[/coord\]",
+        r"\[building\](.*?)\[/building\]",
+        r"\[unit\](.*?)\[/unit\]"
+    ]
+    if not any(re.search(pattern, message.content) for pattern in bbcode_patterns):
+        return  # Ignore messages without BBCode
+
     updated_content = message.content
     updated_content = await process_village_bbcode(updated_content, world, server_code)
     updated_content = await process_player_bbcode(updated_content, world, server_code)
     updated_content = await process_tribe_bbcode(updated_content, world, server_code)
+    updated_content = process_unit_bbcode(updated_content, emoji_manager)
+    updated_content = process_building_bbcode(updated_content, emoji_manager)
 
-    await message.reply(updated_content)
-
-# Command to set world and server configuration for the channel
-@bot.command()
-async def set(ctx, server: str, world: str):
-    """Set the world and server for the current channel."""
-    channel_configs[str(ctx.channel.id)] = {"world": world, "server": server}
-    save_configs()
-    await ctx.send(f"World: {world} and server: {server} set for this channel.")
+    if updated_content != message.content:
+        await message.reply(updated_content)
 
 # Run the bot
 bot.run(TOKEN)

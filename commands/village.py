@@ -12,7 +12,6 @@ async def fetch_village_from_game(x, y, world, server_code):
     if server_host:
         host = server_host.replace('www', str(world))
         url = f"https://{host}/map/village.txt"
-
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if response.status == 200:
@@ -46,7 +45,7 @@ async def process_village_bbcode(content, world, server_code):
             village_name = village["name"]
             points = village["points"]
             village_url= get_final_url("village", village_id, world, server_code)
-            formatted_village = f"[[{village_name} ({points} pontos)]]({village_url})"
+            formatted_village = f"[[{village_name}] ({points} points)]({village_url})"
 
             content = content.replace(f"[coord]{x}|{y}[/coord]", formatted_village)
         else:

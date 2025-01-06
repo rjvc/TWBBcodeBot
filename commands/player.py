@@ -1,3 +1,4 @@
+# commands/player.py
 import re
 import aiohttp
 import urllib.parse
@@ -46,10 +47,11 @@ async def process_player_bbcode(content, world, server_code):
         if player_data:
             player_id = player_data["id"]
             player_name = player_data["name"]
+            player_points = player_data["points"]
             player_url = get_final_url("player", player_id, world, server_code)
-            link = f"[[{player_name}]]({player_url})"
-            # Replace the BBCode with the formatted link
-            content = content.replace(f"[player]{match}[/player]", link)
+            formatted_player = f"[[{player_name}] ({player_points} Points)]({player_url})"
+
+            content = content.replace(f"[player]{match}[/player]", formatted_player)
         else:
             content = content.replace(f"[player]{match}[/player]", f"**{match} not found**")
 
