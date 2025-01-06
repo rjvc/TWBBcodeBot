@@ -1,3 +1,4 @@
 .env
 channel_configs.json
 __pycache__
+commands\__pycache__
