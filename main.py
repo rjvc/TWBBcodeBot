@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from commands.village import process_village_bbcode
 from commands.player import process_player_bbcode
 from commands.ally import process_tribe_bbcode
-from commands.icons import process_unit_bbcode, process_building_bbcode
+from commands.icons import process_unit_bbcode, process_building_bbcode, process_command_bbcode
 from commands.servers import fetch_servers, fetch_worlds
 from utils.api import fetch_emojis
 from commands.emojis import EmojiManager
@@ -33,7 +33,7 @@ emoji_manager.load_emojis()
 
 # Fetch app-specific emojis
 app_emojis = fetch_emojis(APP_ID, TOKEN)
-#print(f"Loaded {app_emojis} emojis.")
+
 # Dictionary to store world configurations per channel
 channel_configs = {}
 
@@ -61,6 +61,7 @@ def load_configs():
 
 # Load the saved configs on startup
 load_configs()
+
 class SelectServerWorld(View):
     def __init__(self, server_data):
         super().__init__()
@@ -116,7 +117,7 @@ async def check(interaction: discord.Interaction):
         config = channel_configs[channel_id]
         server = config.get("server", "Not set")
         world = config.get("world", "Not set")
-        
+
         # Get host link for the configured server and world
         servers = fetch_servers()
         server_data = next((s for s in servers if s['code'] == server), None)
@@ -144,8 +145,6 @@ async def check(interaction: discord.Interaction):
 async def on_ready():
     print(f"Bot is ready. Logged in as {bot.user}")
 
-
-
 @bot.event
 async def on_message(message):
     if message.author == bot.user:
@@ -160,24 +159,30 @@ async def on_message(message):
     world = world_config['world']
     server_code = world_config['server']
 
-    # Check if the message contains BBCode
-    bbcode_patterns = [
-        r"\[ally\](.*?)\[/ally\]",
-        r"\[player\](.*?)\[/player\]",
-        r"\[coord\](.*?)\[/coord\]",
-        r"\[building\](.*?)\[/building\]",
-        r"\[unit\](.*?)\[/unit\]"
-    ]
-    if not any(re.search(pattern, message.content) for pattern in bbcode_patterns):
-        return  # Ignore messages without BBCode
+    # Pre-check for presence of BBCode tags to avoid unnecessary processing
+    if not any(pattern in message.content for pattern in ['[ally]', '[player]', '[coord]', '[building]', '[unit]', '[command]', '[b]', '[i]', '[u]']):
+        return  # No BBCode tags found, exit early
 
+    # Process BBCode only if tags are present
     updated_content = message.content
+
+    # Process each BBCode type
     updated_content = await process_village_bbcode(updated_content, world, server_code)
     updated_content = await process_player_bbcode(updated_content, world, server_code)
     updated_content = await process_tribe_bbcode(updated_content, world, server_code)
     updated_content = process_unit_bbcode(updated_content, emoji_manager)
     updated_content = process_building_bbcode(updated_content, emoji_manager)
+    updated_content = process_command_bbcode(updated_content, emoji_manager)
 
+    # Replace [b], [i], [u] BBCode with Discord Markdown
+    updated_content = (
+        updated_content
+        .replace("[b]", "**").replace("[/b]", "**")
+        .replace("[i]", "_").replace("[/i]", "_")
+        .replace("[u]", "__").replace("[/u]", "__")
+    )
+
+    # Only reply if the content has changed
     if updated_content != message.content:
         await message.reply(updated_content)
 
