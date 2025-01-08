@@ -1,5 +1,7 @@
+#main.py
 import os
 import json
+import re
 import discord
 from discord.ext import commands
 from discord.ui import Select, View
@@ -35,6 +37,7 @@ app_emojis = fetch_emojis(APP_ID, TOKEN)
 # Dictionary to store world configurations per channel
 channel_configs = {}
 
+# Helper functions to manage configurations
 def save_configs():
     try:
         with open("channel_configs.json", "w") as f:
@@ -105,6 +108,7 @@ async def choose(interaction: discord.Interaction):
     view = SelectServerWorld(server_data)
     await interaction.response.send_message("Choose a server and world using the dropdown menus below.", view=view, ephemeral=True)
 
+# Slash command to check the current configuration
 @tree.command(name="check", description="Check the current server and world configuration for this channel.")
 async def check(interaction: discord.Interaction):
     """Check the server and world configuration for the current channel."""
@@ -123,6 +127,7 @@ async def check(interaction: discord.Interaction):
         else:
             link = "Unknown (server not found)"
 
+        # Respond with the configuration details
         await interaction.response.send_message(
             f"**Current configuration**\n"
             f"Server: ```{server}```\n"
@@ -158,15 +163,18 @@ async def on_message(message):
     if not any(pattern in message.content for pattern in ['[ally]', '[player]', '[coord]', '[building]', '[unit]', '[command]', '[b]', '[i]', '[u]']):
         return  # No BBCode tags found, exit early
 
+    # Process BBCode only if tags are present
     updated_content = message.content
+
+    # Process each BBCode type
     updated_content = await process_village_bbcode(updated_content, world, server_code)
     updated_content = await process_player_bbcode(updated_content, world, server_code)
     updated_content = await process_tribe_bbcode(updated_content, world, server_code)
     updated_content = process_unit_bbcode(updated_content, emoji_manager)
     updated_content = process_building_bbcode(updated_content, emoji_manager)
     updated_content = process_command_bbcode(updated_content, emoji_manager)
-    updated_content = f"<@{message.author.id}>\n\n{updated_content}"
 
+    # Replace [b], [i], [u] BBCode with Discord Markdown
     updated_content = (
         updated_content
         .replace("[b]", "**").replace("[/b]", "**")
@@ -174,16 +182,9 @@ async def on_message(message):
         .replace("[u]", "__").replace("[/u]", "__")
     )
 
+    # Only reply if the content has changed
     if updated_content != message.content:
-        # Create a webhook to send the message as the author
-        webhook = await message.channel.create_webhook(name="Formatter Bot")
-        await webhook.send(
-            updated_content,
-            username=message.author.display_name,
-            avatar_url=message.author.avatar.url if message.author.avatar else None,
-        )
-        
-        await message.delete()
-        await webhook.delete()
+        await message.reply(updated_content)
 
+# Run the bot
 bot.run(TOKEN)
