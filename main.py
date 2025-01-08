@@ -137,26 +137,26 @@ async def check(interaction: discord.Interaction):
         )
 
 @bot.event
-async def on_ready():
-    print(f"Bot is ready. Logged in as {bot.user}")
-
-@bot.event
 async def on_message(message):
     if message.author == bot.user:
         return
 
     channel_id = str(message.channel.id)
+
+    # Pre-check for presence of BBCode tags to avoid unnecessary processing
+    bbcode_patterns = ['[ally]', '[player]', '[coord]', '[building]', '[unit]', '[command]', '[b]', '[i]', '[u]']
+    if not any(pattern in message.content for pattern in bbcode_patterns):
+        return  # No BBCode tags found, exit early
+
+    # Check if the channel is configured
     if channel_id not in channel_configs:
         await message.channel.send("Please set a world and server using the `/choose` command.")
         return
 
-    world_config = channel_configs.get(channel_id)
+    # Retrieve the channel's world configuration
+    world_config = channel_configs[channel_id]
     world = world_config['world']
     server_code = world_config['server']
-
-    # Pre-check for presence of BBCode tags to avoid unnecessary processing
-    if not any(pattern in message.content for pattern in ['[ally]', '[player]', '[coord]', '[building]', '[unit]', '[command]', '[b]', '[i]', '[u]']):
-        return  # No BBCode tags found, exit early
 
     updated_content = message.content
     updated_content = await process_village_bbcode(updated_content, world, server_code)
@@ -167,6 +167,7 @@ async def on_message(message):
     updated_content = process_command_bbcode(updated_content, emoji_manager)
     updated_content = f"<@{message.author.id}>\n\n{updated_content}"
 
+    # Replace BBCode tags with Discord formatting
     updated_content = (
         updated_content
         .replace("[b]", "**").replace("[/b]", "**")
