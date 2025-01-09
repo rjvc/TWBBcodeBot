@@ -13,11 +13,11 @@ def get_final_url(type, entity_id, world, server_code):
     
     # Determine the URL path based on the type
     if type == "ally":
-        return f"https://{host}/game.php?screen=info_ally&id={entity_id}"
+        return f"<https://{host}/game.php?screen=info_ally&id={entity_id}>"
     elif type == "player":
-        return f"https://{host}/game.php?screen=info_player&id={entity_id}"
+        return f"<https://{host}/game.php?screen=info_player&id={entity_id}>"
     elif type == "village":
-        return f"https://{host}/game.php?screen=info_village&id={entity_id}"
+        return f"<https://{host}/game.php?screen=info_village&id={entity_id}>"
     
     # Return an empty string if the type is invalid
     return ""

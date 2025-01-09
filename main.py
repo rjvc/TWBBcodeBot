@@ -4,6 +4,7 @@ import discord
 from discord.ext import commands
 from discord.ui import Select, View
 from discord import app_commands
+from discord import Embed
 from dotenv import load_dotenv
 from commands.village import process_village_bbcode
 from commands.player import process_player_bbcode
@@ -142,22 +143,44 @@ async def on_message(message):
         return
 
     channel_id = str(message.channel.id)
+    
+    # Check if the channel is configured
+    if channel_id not in channel_configs:
+        await message.channel.send("Please set a world and server using the `/choose` command.")
+        return
 
     # Pre-check for presence of BBCode tags to avoid unnecessary processing
     bbcode_patterns = ['[ally]', '[player]', '[coord]', '[building]', '[unit]', '[command]', '[b]', '[i]', '[u]']
     if not any(pattern in message.content for pattern in bbcode_patterns):
         return  # No BBCode tags found, exit early
 
-    # Check if the channel is configured
-    if channel_id not in channel_configs:
-        await message.channel.send("Please set a world and server using the `/choose` command.")
-        return
-
     # Retrieve the channel's world configuration
     world_config = channel_configs[channel_id]
     world = world_config['world']
     server_code = world_config['server']
+    
+    def determine_embed_color(content):
+        # Define a mapping of commands to their corresponding colors
+        command_colors = {
+            "[command]attack[/command]": 0xA9A9A9,  # Light Grey
+            "[command]attack_small[/command]": 0x00FF00,  # Green
+            "[command]attack_medium[/command]": 0xFFA500,  # Orange
+            "[command]attack_large[/command]": 0xFF0000,  # Red
+            "[command]support[/command]": 0x0000FF,  # Blue
+        }
 
+        # Find matching commands in the content
+        matching_commands = [cmd for cmd in command_colors if cmd in content]
+        # > 1 command found
+        if len(matching_commands) > 1:
+            return 0x808080  # Medium Grey
+        # 1 command found
+        if matching_commands:
+            return command_colors[matching_commands[0]]
+        # no commands found
+        return 0x00FFFF  # Cyan
+
+    
     updated_content = message.content
     updated_content = await process_village_bbcode(updated_content, world, server_code)
     updated_content = await process_player_bbcode(updated_content, world, server_code)
@@ -165,26 +188,35 @@ async def on_message(message):
     updated_content = process_unit_bbcode(updated_content, emoji_manager)
     updated_content = process_building_bbcode(updated_content, emoji_manager)
     updated_content = process_command_bbcode(updated_content, emoji_manager)
-    updated_content = f"<@{message.author.id}>\n\n{updated_content}"
-
-    # Replace BBCode tags with Discord formatting
     updated_content = (
         updated_content
         .replace("[b]", "**").replace("[/b]", "**")
         .replace("[i]", "_").replace("[/i]", "_")
         .replace("[u]", "__").replace("[/u]", "__")
     )
+    # Add author mention
+    updated_content_with_mention = f"<@{message.author.id}>\n\n{updated_content}"
+    embed_color = determine_embed_color(message.content)
+    embed = Embed(title=f"{world.upper()}", description=updated_content_with_mention, color=embed_color)
 
+    # Check if content has changed
     if updated_content != message.content:
-        # Create a webhook to send the message as the author
-        webhook = await message.channel.create_webhook(name="Formatter Bot")
-        await webhook.send(
-            updated_content,
-            username=message.author.display_name,
-            avatar_url=message.author.avatar.url if message.author.avatar else None,
-        )
-        
-        await message.delete()
-        await webhook.delete()
+        try:
+            # Create a webhook to send the message as the author
+            webhook = await message.channel.create_webhook(name="Formatter Bot")
+            
+            # Send the embed via webhook
+            await webhook.send(
+                embed=embed,
+                username=message.author.display_name,
+                avatar_url=message.author.avatar.url if message.author.avatar else message.author.default_avatar.url,
+            )
+            
+            # Delete the original message and clean up the webhook
+            await message.delete()
+            await webhook.delete()
+
+        except Exception as e:
+            print(f"An error occurred: {e}")
 
 bot.run(TOKEN)
